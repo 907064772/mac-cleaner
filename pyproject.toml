@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mac-cleaner"
+version = "0.1.0"
+description = "Explore disk usage and clean caches on macOS — find what's eating space and reclaim it safely."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "907064772" }]
+keywords = ["macos", "disk", "cleaner", "cache", "cli", "disk-usage"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Filesystems",
+]
+# Intentionally has NO runtime dependencies — stdlib only, so it installs even
+# on a full disk without pulling anything from the network.
+dependencies = []
+
+[project.scripts]
+mac-cleaner = "mac_cleaner:cli"
+
+[tool.setuptools]
+py-modules = ["mac_cleaner"]
