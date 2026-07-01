@@ -23,25 +23,32 @@ your disk is already full.
 
 ## Install
 
-Pick whichever fits. The first needs **no build, no network, no extra disk
-space** — best when your disk is already full.
+**One-liner (no clone needed)** — the CLI is a single self-contained file, so
+this is all it takes:
 
 ```bash
-# A) Symlink installer (recommended) — creates the `mac-cleaner` command
-./install.sh
-mac-cleaner suggest          # if ~/.local/bin is on your PATH (installer tells you)
+mkdir -p ~/.local/bin && \
+  curl -fsSL https://raw.githubusercontent.com/907064772/mac-cleaner/main/mac_cleaner.py \
+  -o ~/.local/bin/mac-cleaner && chmod +x ~/.local/bin/mac-cleaner
+```
+
+Then run `mac-cleaner suggest` (make sure `~/.local/bin` is on your `PATH`).
+
+Or pick another method — all dependency-free:
+
+```bash
+# A) Clone + symlink installer — creates the `mac-cleaner` command
+git clone https://github.com/907064772/mac-cleaner.git && cd mac-cleaner && ./install.sh
 
 # B) pipx — isolated install
-pipx install .
+pipx install git+https://github.com/907064772/mac-cleaner.git
 
-# C) pip
+# C) pip (from a clone)
 pip install .
 
 # D) No install at all — just run the script
 python3 mac_cleaner.py suggest
 ```
-
-After A/B/C you have a real `mac-cleaner` command on your PATH.
 
 ## Quick start
 
