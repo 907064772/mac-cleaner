@@ -20,6 +20,7 @@ import argparse
 import os
 import shutil
 import sys
+import unicodedata
 from dataclasses import dataclass
 
 HOME = os.path.expanduser("~")
@@ -78,6 +79,42 @@ def human(n: int) -> str:
             return f"{size:.1f}{u}"
         size /= step
     return f"{size:.1f}P"
+
+
+def _char_width(ch: str) -> int:
+    """Terminal columns for one char: 0 combining, 2 wide/full (CJK), else 1."""
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def dwidth(s: str) -> int:
+    """Display width of a string in terminal columns (CJK/emoji count as 2)."""
+    return sum(_char_width(ch) for ch in s)
+
+
+def truncate_width(s: str, maxw: int) -> str:
+    """Truncate to at most `maxw` display columns, adding an ellipsis if cut."""
+    if maxw <= 0:
+        return ""
+    if dwidth(s) <= maxw:
+        return s
+    if maxw == 1:
+        return "…"
+    out, w = "", 0
+    for ch in s:
+        cw = _char_width(ch)
+        if w + cw > maxw - 1:      # leave one column for the ellipsis
+            break
+        out += ch
+        w += cw
+    return out + "…"
+
+
+def pad_width(s: str, width: int) -> str:
+    """Left-justify to `width` display columns (accounts for wide chars)."""
+    gap = width - dwidth(s)
+    return s + " " * gap if gap > 0 else s
 
 
 def status(msg: str) -> None:
@@ -475,9 +512,17 @@ def _read_key(fd: int) -> str:
 
 
 def _shorten(s: str, width: int) -> str:
-    if width <= 1 or len(s) <= width:
+    """Shorten to `width` display columns, keeping the tail (…/end/of/path)."""
+    if width <= 1 or dwidth(s) <= width:
         return s
-    return "…" + s[-(width - 1):]
+    out, w = "", 0
+    for ch in reversed(s):
+        cw = _char_width(ch)
+        if w + cw > width - 1:     # leave one column for the leading ellipsis
+            break
+        out = ch + out
+        w += cw
+    return "…" + out
 
 
 def _tag_text(path: str) -> tuple[str | None, str]:
@@ -500,13 +545,11 @@ def _row(c: Child, total: int, selected: bool, cols: int) -> str:
     safety, tag = _tag_text(c.path)
     name = c.name + ("/" if c.is_dir else "")
     fixed = 1 + 2 + 8 + 1 + barlen + 1 + 1  # lead + marker + size + sp + bar + sp + sp
-    tagspace = (len(tag) + 1) if tag else 0
+    tagspace = (dwidth(tag) + 1) if tag else 0
     avail = max(8, cols - fixed - tagspace)
-    if len(name) > avail:
-        name = name[: avail - 1] + "…"
-    name_field = name.ljust(avail)
+    name_field = pad_width(truncate_width(name, avail), avail)
     if selected:
-        body = f"{marker}{size} {bar} {name_field} {tag}".rstrip().ljust(cols - 1)
+        body = pad_width(f"{marker}{size} {bar} {name_field} {tag}".rstrip(), cols - 2)
         return " \033[7m" + body + "\033[0m"
     csize = bold(size)
     cbar = dim(bar)
@@ -543,7 +586,8 @@ def cmd_explore(args) -> int:
                " " + bold("📁 " + _shorten(path, cols - 6)) + "\033[K\r\n",
                dim(" " + "─" * (cols - 2)) + "\033[K\r\n\r\n"]
         if total:
-            out.append(f"   ⏳ scanning…  {done}/{total}  {dim(name[:40])}\033[K\r\n")
+            out.append(f"   ⏳ scanning…  {done}/{total}  "
+                       f"{dim(truncate_width(name, 40))}\033[K\r\n")
         else:
             out.append("   ⏳ scanning…\033[K\r\n")
         out.append("\033[J")
@@ -577,12 +621,15 @@ def cmd_explore(args) -> int:
                message: str = "") -> None:
         cols, _, visible = dims()
         ck, ct = classify(path)
-        note = ""
+        note, note_w = "", 0
         if ck in ("exact", "inside") and ct:
             note = "  " + SAFETY_COLOR[ct.safety](SAFETY_PLAIN[ct.safety])
+            note_w = 2 + dwidth(SAFETY_PLAIN[ct.safety])
+        # reserve columns: 1 lead + 3 for "📁 " + note + 1 margin
+        path_field = _shorten(path, max(10, cols - 5 - note_w))
         out = ["\033[H",
                " " + disk_summary_line() + "\033[K\r\n",
-               " " + bold("📁 " + _shorten(path, cols - 10)) + note + "\033[K\r\n",
+               " " + bold("📁 " + path_field) + note + "\033[K\r\n",
                dim(" " + "─" * (cols - 2)) + "\033[K\r\n"]
         total = max(1, sum(c.size for c in kids))
         rendered = 0
@@ -672,7 +719,8 @@ def cmd_explore(args) -> int:
                         safety, _t = _tag_text(c.path)
                         warn = "" if safety else "  ⚠ NOT a known cache!"
                         render(current, kids, sel, scroll,
-                               red(f"Delete '{c.name}' ({human(c.size)})?{warn}  "
+                               red(f"Delete '{truncate_width(c.name, 30)}' "
+                                   f"({human(c.size)})?{warn}  "
                                    "y = confirm, any other key = cancel"))
                         if _read_key(fd) in ("y", "Y"):
                             freed = delete_path(c.path)
